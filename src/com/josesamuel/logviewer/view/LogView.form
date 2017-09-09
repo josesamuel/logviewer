@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<form xmlns="http://www.intellij.com/uidesigner/form/" version="1" bind-to-class="com.josesamuel.logviewer.view.LogView">
+  <grid id="27dc6" binding="myPanel" layout-manager="BorderLayout" hgap="-1" vgap="-1">
+    <constraints>
+      <xy x="20" y="20" width="606" height="272"/>
+    </constraints>
+    <properties>
+      <background color="-1"/>
+    </properties>
+    <border type="none"/>
+    <children>
+      <splitpane id="4406b" binding="splitPane">
+        <constraints border-constraint="Center"/>
+        <properties>
+          <dividerLocation value="0"/>
+          <dividerSize value="0"/>
+        </properties>
+        <border type="none"/>
+        <children>
+          <grid id="741da" binding="editorPanel" layout-manager="BorderLayout" hgap="0" vgap="0">
+            <constraints>
+              <splitpane position="right"/>
+            </constraints>
+            <properties/>
+            <border type="none"/>
+            <children/>
+          </grid>
+          <grid id="a0190" binding="filterPanel" layout-manager="BorderLayout" hgap="0" vgap="0">
+            <constraints>
+              <splitpane position="left"/>
+            </constraints>
+            <properties/>
+            <border type="none">
+              <size top="0" left="0" bottom="1" right="0"/>
+            </border>
+            <children>
+              <grid id="73be5" layout-manager="GridLayoutManager" row-count="2" column-count="1" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+                <margin top="0" left="0" bottom="0" right="0"/>
+                <constraints border-constraint="North"/>
+                <properties/>
+                <border type="none">
+                  <size top="1" left="0" bottom="1" right="0"/>
+                </border>
+                <children>
+                  <component id="8521c" class="javax.swing.JLabel">
+                    <constraints>
+                      <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="0" fill="0" indent="0" use-parent-layout="false"/>
+                    </constraints>
+                    <properties>
+                      <font style="1"/>
+                      <icon value="icons/lv_16.png"/>
+                      <text value="Log Viewer Filters"/>
+                    </properties>
+                  </component>
+                  <grid id="268c6" layout-manager="FlowLayout" hgap="5" vgap="5" flow-align="1">
+                    <constraints>
+                      <grid row="1" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+                    </constraints>
+                    <properties/>
+                    <border type="etched"/>
+                    <children>
+                      <component id="a7d19" class="javax.swing.JCheckBox" binding="vCheckBox" default-binding="true">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="V"/>
+                          <toolTipText value="Enable to see Verbose logs"/>
+                        </properties>
+                      </component>
+                      <component id="77a09" class="javax.swing.JCheckBox" binding="dCheckBox" default-binding="true">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="D"/>
+                          <toolTipText value="Enable to see Debug logs"/>
+                        </properties>
+                      </component>
+                      <component id="2424f" class="javax.swing.JCheckBox" binding="iCheckBox" default-binding="true">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="I"/>
+                          <toolTipText value="Enable to see Info logs"/>
+                        </properties>
+                      </component>
+                      <component id="f1370" class="javax.swing.JCheckBox" binding="wCheckBox">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="W"/>
+                          <toolTipText value="Enable to see Warning logs"/>
+                        </properties>
+                      </component>
+                      <component id="3f3d3" class="javax.swing.JCheckBox" binding="eCheckBox">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="E"/>
+                          <toolTipText value="Enable to see Error logs"/>
+                        </properties>
+                      </component>
+                      <component id="5b348" class="javax.swing.JCheckBox" binding="aCheckBox">
+                        <constraints/>
+                        <properties>
+                          <selected value="true"/>
+                          <text value="A"/>
+                          <toolTipText value="Enable to see Assert logs"/>
+                        </properties>
+                      </component>
+                    </children>
+                  </grid>
+                </children>
+              </grid>
+              <grid id="4cdbb" layout-manager="GridLayoutManager" row-count="1" column-count="2" same-size-horizontally="true" same-size-vertically="true" hgap="-1" vgap="-1">
+                <margin top="0" left="0" bottom="0" right="0"/>
+                <constraints border-constraint="Center"/>
+                <properties/>
+                <border type="none"/>
+                <children>
+                  <grid id="b6398" layout-manager="BorderLayout" hgap="0" vgap="0">
+                    <constraints>
+                      <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+                    </constraints>
+                    <properties/>
+                    <border type="etched">
+                      <size top="1" left="1" bottom="1" right="1"/>
+                    </border>
+                    <children>
+                      <component id="f9a77" class="javax.swing.JLabel">
+                        <constraints border-constraint="North"/>
+                        <properties>
+                          <horizontalAlignment value="0"/>
+                          <horizontalTextPosition value="0"/>
+                          <text value="Process"/>
+                        </properties>
+                      </component>
+                      <scrollpane id="86cfa">
+                        <constraints border-constraint="Center"/>
+                        <properties/>
+                        <border type="none"/>
+                        <children>
+                          <component id="b4c76" class="javax.swing.JList" binding="processList">
+                            <constraints/>
+                            <properties/>
+                          </component>
+                        </children>
+                      </scrollpane>
+                    </children>
+                  </grid>
+                  <grid id="7bea4" layout-manager="BorderLayout" hgap="0" vgap="0">
+                    <constraints>
+                      <grid row="0" column="1" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+                    </constraints>
+                    <properties/>
+                    <border type="etched">
+                      <size top="1" left="1" bottom="1" right="1"/>
+                    </border>
+                    <children>
+                      <component id="30b95" class="javax.swing.JLabel">
+                        <constraints border-constraint="North"/>
+                        <properties>
+                          <horizontalAlignment value="0"/>
+                          <text value="Text"/>
+                        </properties>
+                      </component>
+                      <scrollpane id="1d4d3">
+                        <constraints border-constraint="Center"/>
+                        <properties/>
+                        <border type="none"/>
+                        <children>
+                          <component id="75ead" class="javax.swing.JTextArea" binding="textFilters">
+                            <constraints/>
+                            <properties>
+                              <toolTipText value="Add filters"/>
+                            </properties>
+                          </component>
+                        </children>
+                      </scrollpane>
+                    </children>
+                  </grid>
+                </children>
+              </grid>
+            </children>
+          </grid>
+        </children>
+      </splitpane>
+    </children>
+  </grid>
+</form>
