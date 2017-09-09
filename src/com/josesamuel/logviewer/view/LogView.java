@@ -40,6 +40,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The logviewer view
@@ -68,9 +69,9 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
     private volatile IDevice myDevice;
     private boolean filterOpen;
     private DefaultListModel processListModel;
-    private java.util.Set<Client> processFilter = new java.util.HashSet<>();
-    private java.util.Set<String> addFilters = new java.util.HashSet<>();
-    private java.util.Set<String> removeFilters = new java.util.HashSet<>();
+    private java.util.Set<Client> processFilter;
+    private java.util.Set<String> addFilters;
+    private java.util.Set<String> removeFilters;
     //Gets the message from the logcat service
     private AndroidLogcatService.LogcatListener myLogcatReceiver = new AndroidLogcatService.LogcatListener() {
         private LogCatHeader myActiveHeader;
@@ -114,6 +115,10 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         myDeviceContext = deviceContext;
         myProject = project;
         myPreselectedDevice = preselectedDevice;
+
+        processFilter =  Collections.newSetFromMap(new ConcurrentHashMap<Client, Boolean>());
+        addFilters =  Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+        removeFilters =  Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
         Disposer.register(myProject, this);
 

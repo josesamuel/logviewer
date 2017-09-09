@@ -1,14 +1,20 @@
 <idea-plugin>
     <id>com.josesamuel.logviewer</id>
     <name>Log Viewer</name>
-    <version>1.0</version>
+    <version>1.1</version>
     <vendor url="https://josesamuel.com/logviewer/">LogViewer</vendor>
 
     <description><![CDATA[
-      Android Studio Plugin to view logcat logs with easy filtering.
+      LogViewer is an Android Studio plugin to view logcat logs that provides better filtering.
+
+      Features supported
+         1) Filter on multiple process easily
+         2) Easily specify multiple possitive and negative text filters
     ]]></description>
 
     <change-notes><![CDATA[
+      1.1 : Support to multiple text filters
+
       1.0 : Initial version release.
     ]]>
     </change-notes>
