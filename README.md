@@ -13,6 +13,16 @@ Android Studio plugin with better log viewing capability.
 * Filter logs from multiple processes easily
 
 
+Getting Log Viewer
+--------
+
+* Open Android Studio Preferences/Settings
+* Go to Plugins
+* Select "Browse Repositories"
+* Search for "Log Viewer" and install
+
+![](https://josesamuel.com/logviewer/LogViewerInstall.gif)
+
 
 
 License

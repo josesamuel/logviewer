@@ -11,14 +11,19 @@ import com.android.tools.idea.ddms.ClientCellRenderer;
 import com.android.tools.idea.ddms.DeviceContext;
 import com.android.tools.idea.logcat.*;
 import com.google.common.collect.Lists;
+import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.diagnostic.logging.*;
 import com.intellij.execution.impl.ConsoleViewImpl;
 import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.BrowserUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.SelectionModel;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
@@ -27,6 +32,8 @@ import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.SideBorder;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
+import com.josesamuel.logviewer.gist.GistCreator;
+import icons.LogviewerPluginIcons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -47,7 +54,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * @author js
  */
-public abstract class LogView implements Disposable, AndroidDebugBridge.IClientChangeListener {
+public abstract class LogView implements Disposable, AndroidDebugBridge.IClientChangeListener, GistCreator.GistListener {
 
 
     private final Project myProject;
@@ -72,6 +79,8 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
     private java.util.Set<Client> processFilter;
     private java.util.Set<String> addFilters;
     private java.util.Set<String> removeFilters;
+    private GistCreator gistCreator;
+
     //Gets the message from the logcat service
     private AndroidLogcatService.LogcatListener myLogcatReceiver = new AndroidLogcatService.LogcatListener() {
         private LogCatHeader myActiveHeader;
@@ -115,10 +124,11 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         myDeviceContext = deviceContext;
         myProject = project;
         myPreselectedDevice = preselectedDevice;
+        gistCreator = new GistCreator();
 
-        processFilter =  Collections.newSetFromMap(new ConcurrentHashMap<Client, Boolean>());
-        addFilters =  Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-        removeFilters =  Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+        processFilter = Collections.newSetFromMap(new ConcurrentHashMap<Client, Boolean>());
+        addFilters = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+        removeFilters = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
         Disposer.register(myProject, this);
 
@@ -245,12 +255,11 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
 
             });
 
-            editorActions.addSeparator();
-            editorActions.add(new MyConfigureLogcatHeaderAction());
+            editorActions.add(createGistAction());
+            editorActions.add(new BrowserHelpAction("LogViewer", "https://josesamuel.com/logviewer/"));
             editorActions.addSeparator();
             editorActions.add(myLogConsole.getOrCreateActions());
-            editorActions.addSeparator();
-            editorActions.add(new BrowserHelpAction("LogViewer", "https://josesamuel.com/logviewer/"));
+            editorActions.add(new MyConfigureLogcatHeaderAction());
 
             final ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,
                     editorActions, false);
@@ -289,6 +298,18 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
                 updateLogConsole();
             }
         });
+    }
+
+    /**
+     * Returns an action that creates a gist
+     */
+    private AnAction createGistAction() {
+        return new AnAction("Share Log", "Share log using Gist", AllIcons.Actions.Share) {
+            @Override
+            public void actionPerformed(AnActionEvent anActionEvent) {
+                gistCreator.createGist(myLogConsole.getSelectedText(true), LogView.this);
+            }
+        };
     }
 
     protected abstract boolean isActive();
@@ -452,6 +473,16 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         return false;
     }
 
+    @Override
+    public void onGistCreated(final String gistUrl) {
+        EventQueue.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                BrowserUtil.browse(gistUrl);
+            }
+        });
+    }
+
     /**
      * console that shows the messages
      */
@@ -462,9 +493,6 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         public AndroidLogConsole(Project project, LogFilterModel logFilterModel, LogFormatter logFormatter) {
             super(project, null, "", false, logFilterModel, GlobalSearchScope.allScope(project), logFormatter);
             ConsoleView console = getConsole();
-            if (console instanceof ConsoleViewImpl) {
-                ConsoleViewImpl c = ((ConsoleViewImpl) console);
-            }
             myPreferences = AndroidLogcatPreferences.getInstance(project);
             myRegexFilterComponent.setFilter(myPreferences.TOOL_WINDOW_CUSTOM_FILTER);
             myRegexFilterComponent.setIsRegex(myPreferences.TOOL_WINDOW_REGEXP_FILTER);
@@ -494,6 +522,26 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
 
         public void refresh() {
             onTextFilterChange();
+        }
+
+        /**
+         * Returns the selected text if there is any selection. If not return all based on parameter
+         *
+         * @param defaultToAll If no selection, then this decides whether to return all text
+         */
+        String getSelectedText(boolean defaultToAll) {
+            ConsoleView console = this.getConsole();
+            Editor myEditor = console != null ? (Editor) CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+            if (myEditor != null) {
+                Document document = myEditor.getDocument();
+                final SelectionModel selectionModel = myEditor.getSelectionModel();
+                if (selectionModel.hasSelection()) {
+                    return selectionModel.getSelectedText();
+                } else if (defaultToAll) {
+                    return document.getText();
+                }
+            }
+            return null;
         }
     }
 
