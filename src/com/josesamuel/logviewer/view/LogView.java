@@ -1,21 +1,16 @@
-
 package com.josesamuel.logviewer.view;
 
-import com.android.ddmlib.AndroidDebugBridge;
-import com.android.ddmlib.Client;
-import com.android.ddmlib.IDevice;
 import com.android.ddmlib.logcat.LogCatHeader;
 import com.android.ddmlib.logcat.LogCatMessage;
 import com.android.tools.idea.actions.BrowserHelpAction;
-import com.android.tools.idea.ddms.ClientCellRenderer;
 import com.android.tools.idea.ddms.DeviceContext;
 import com.android.tools.idea.logcat.*;
-import com.google.common.collect.Lists;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.diagnostic.logging.*;
 import com.intellij.execution.impl.ConsoleViewImpl;
 import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.execution.ui.ConsoleView;
+import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.BrowserUtil;
 import com.intellij.openapi.Disposable;
@@ -23,7 +18,9 @@ import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.FoldRegion;
 import com.intellij.openapi.editor.SelectionModel;
+import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
@@ -33,37 +30,41 @@ import com.intellij.ui.SideBorder;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.josesamuel.logviewer.gist.GistCreator;
-import icons.LogviewerPluginIcons;
+import com.josesamuel.logviewer.log.LogDataListener;
+import com.josesamuel.logviewer.log.LogProcess;
+import com.josesamuel.logviewer.log.LogSource;
+import com.josesamuel.logviewer.log.LogSourceManager;
+import com.josesamuel.logviewer.log.dnd.DnDHandler;
+import com.josesamuel.logviewer.util.SingleTaskBackgroundExecutor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import java.awt.*;
+import java.awt.event.ItemListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.*;
 import java.util.List;
+import java.util.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The logviewer view
+ * The main view of the logviewer
  *
  * @author js
  */
-public abstract class LogView implements Disposable, AndroidDebugBridge.IClientChangeListener, GistCreator.GistListener {
+public abstract class LogView implements Disposable, GistCreator.GistListener, LogSourceManager.LogSourceManagerListener, LogDataListener {
 
-
+    private static final String CONSOLE_VIEW_POPUP_MENU = "ConsoleView.PopupMenu";
+    private static final String groupName = "LogViewer Folding";
+    private static final long RESET_DELAY = 600;
     private final Project myProject;
-    private final DeviceContext myDeviceContext;
     private final AndroidLogConsole myLogConsole;
-    private final IDevice myPreselectedDevice;
+    private LogSourceManager logSourceManager;
+    private LogSourcePanel logSourcePanel;
     private JPanel myPanel;
     private JPanel editorPanel;
-    private JPanel filterPanel;
     private JSplitPane splitPane;
     private JCheckBox vCheckBox;
     private JCheckBox dCheckBox;
@@ -73,231 +74,234 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
     private JCheckBox wCheckBox;
     private JCheckBox eCheckBox;
     private JCheckBox aCheckBox;
-    private volatile IDevice myDevice;
+    private JLabel processFilterTitle;
+    private volatile LogSource myLogSource;
     private boolean filterOpen;
-    private DefaultListModel processListModel;
-    private java.util.Set<Client> processFilter;
+    private DefaultListModel<LogProcess> processListModel;
+    private java.util.Set<LogProcess> processFilter;
     private java.util.Set<String> addFilters;
     private java.util.Set<String> removeFilters;
     private GistCreator gistCreator;
-
-    //Gets the message from the logcat service
-    private AndroidLogcatService.LogcatListener myLogcatReceiver = new AndroidLogcatService.LogcatListener() {
-        private LogCatHeader myActiveHeader;
-
-        @Override
-        public void onLogLineReceived(@NotNull LogCatMessage line) {
-            if (!line.getHeader().equals(myActiveHeader)) {
-                myActiveHeader = line.getHeader();
-                String message = AndroidLogcatFormatter.formatMessageFull(myActiveHeader, line.getMessage());
-                receiveFormattedLogLine(message);
-            } else {
-                String message = AndroidLogcatFormatter.formatContinuation(line.getMessage());
-                receiveFormattedLogLine(message);
-            }
-        }
-
-        protected void receiveFormattedLogLine(@NotNull String line) {
-            myLogConsole.addLogLine(line);
-        }
-
-        @Override
-        public void onCleared() {
-            if (myLogConsole.getConsole() != null) {
-                myLogConsole.clear();
-            }
-        }
-    };
     private LogViewerFilterModel myLogFilterModel = new LogViewerFilterModel();
-
-    /**
-     * Logcat view with device obtained from {@link DeviceContext}
-     */
-    public LogView(@NotNull final Project project, @NotNull DeviceContext deviceContext) {
-        this(project, null, deviceContext);
-    }
+    private AndroidLogcatFormatter logFormatter;
+    private int defaultCycleBufferSize;
+    private Timer timer;
+    private long textFilterUpdateCreateTime;
+    private boolean liveLogPaused;
 
     /**
      * Initialize the views
      */
-    private LogView(final Project project, @Nullable IDevice preselectedDevice, @Nullable DeviceContext deviceContext) {
-        myDeviceContext = deviceContext;
+    public LogView(final Project project, @Nullable DeviceContext deviceContext, int defaultCycleBufferSize) {
         myProject = project;
-        myPreselectedDevice = preselectedDevice;
         gistCreator = new GistCreator();
+        this.defaultCycleBufferSize = defaultCycleBufferSize;
+        logSourceManager = new LogSourceManager(project, deviceContext, this);
 
-        processFilter = Collections.newSetFromMap(new ConcurrentHashMap<Client, Boolean>());
+        processFilter = Collections.newSetFromMap(new ConcurrentHashMap<LogProcess, Boolean>());
         addFilters = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
         removeFilters = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
-        Disposer.register(myProject, this);
+        logFormatter = new AndroidLogcatFormatter(AndroidLogcatPreferences.getInstance(project));
+        myLogConsole = new AndroidLogConsole(myProject, myLogFilterModel, logFormatter);
+        timer = new Timer(true);
 
-        AndroidDebugBridge.addClientChangeListener(this);
+        //Update tasks
+        Runnable processUpdateTask = () -> {
+            processFilter.clear();
+            for (Object selection : processList.getSelectedValuesList()) {
+                processFilter.add((LogProcess) selection);
+            }
+            myLogConsole.refresh("Filtering process");
+        };
+        Runnable textUpdateTask = this::resetTextFilters;
+        Runnable levelUpdateTask = () -> myLogConsole.refresh("Applying level filters");
+
 
         //initialize the process list
         processList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        processListModel = new DefaultListModel();
+        processListModel = new DefaultListModel<LogProcess>();
         processList.setModel(processListModel);
         processList.setCellRenderer(new ClientCellRenderer());
-        processList.addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent listSelectionEvent) {
-                if (!listSelectionEvent.getValueIsAdjusting()) {
-                    processFilter.clear();
-                    for (Object selection : processList.getSelectedValuesList()) {
-                        processFilter.add((Client) selection);
-                    }
-                    myLogConsole.refresh();
-                }
+        processList.addListSelectionListener(listSelectionEvent -> {
+            if (!listSelectionEvent.getValueIsAdjusting()) {
+                resetUpdateTimer(processUpdateTask);
             }
         });
+
 
         //set up filters
         textFilters.addKeyListener(new KeyAdapter() {
             @Override
             public void keyReleased(KeyEvent keyEvent) {
                 super.keyReleased(keyEvent);
-                addFilters.clear();
-                removeFilters.clear();
-                StringTokenizer tokenizer = new StringTokenizer(textFilters.getText(), "\n");
-                String token;
-                while (tokenizer.hasMoreElements()) {
-                    token = tokenizer.nextToken().trim().toLowerCase();
-                    if (!token.isEmpty()) {
-                        if (token.startsWith("-")) {
-                            if (token.length() > 1) {
-                                removeFilters.add(token.substring(1));
-                            }
-                        } else {
-                            if (token.startsWith("\\-")) {
-                                token = token.substring(1);
-                            }
-                            addFilters.add(token);
-                        }
-                    }
-                }
-                myLogConsole.refresh();
+                resetUpdateTimer(textUpdateTask);
             }
         });
 
-        ChangeListener levelChangeListener = new ChangeListener() {
-            @Override
-            public void stateChanged(ChangeEvent changeEvent) {
-                myLogConsole.refresh();
-            }
-        };
+        //level checkboxes
+        ItemListener levelChangeListener = itemEvent -> resetUpdateTimer(levelUpdateTask);
 
-        vCheckBox.addChangeListener(levelChangeListener);
-        dCheckBox.addChangeListener(levelChangeListener);
-        iCheckBox.addChangeListener(levelChangeListener);
-        wCheckBox.addChangeListener(levelChangeListener);
-        eCheckBox.addChangeListener(levelChangeListener);
-        aCheckBox.addChangeListener(levelChangeListener);
+        vCheckBox.addItemListener(levelChangeListener);
+        dCheckBox.addItemListener(levelChangeListener);
+        iCheckBox.addItemListener(levelChangeListener);
+        wCheckBox.addItemListener(levelChangeListener);
+        eCheckBox.addItemListener(levelChangeListener);
+        aCheckBox.addItemListener(levelChangeListener);
 
 
         filterOpen = false;
         splitPane.setDividerLocation(0);
         splitPane.setDividerSize(0);
 
-
-        AndroidLogcatFormatter logFormatter = new AndroidLogcatFormatter(AndroidLogcatPreferences.getInstance(project));
-        myLogConsole = new AndroidLogConsole(project, myLogFilterModel, logFormatter);
-
-        if (preselectedDevice == null && deviceContext != null) {
-            DeviceContext.DeviceSelectionListener deviceSelectionListener =
-                    new DeviceContext.DeviceSelectionListener() {
-                        @Override
-                        public void deviceSelected(@Nullable IDevice device) {
-                            notifyDeviceUpdated(false);
-                        }
-
-                        @Override
-                        public void deviceChanged(@NotNull IDevice device, int changeMask) {
-                            if (device == myDevice && ((changeMask & IDevice.CHANGE_STATE) == IDevice.CHANGE_STATE)) {
-                                notifyDeviceUpdated(true);
-                            }
-                        }
-
-                        @Override
-                        public void clientSelected(@Nullable final Client c) {
-                        }
-                    };
-            deviceContext.addListener(deviceSelectionListener, this);
-        }
-
-        updateProcessList();
-
-
         JComponent consoleComponent = myLogConsole.getComponent();
 
         final ConsoleView console = myLogConsole.getConsole();
+
         if (console != null) {
-            DefaultActionGroup editorActions = new DefaultActionGroup();
-            editorActions.addSeparator();
-            editorActions.add(new ToggleAction("Show/Hide Filters", "Configure Log Viewer Filters", AllIcons.General.Filter) {
-
-                @Override
-                public boolean isSelected(AnActionEvent anActionEvent) {
-                    return filterOpen;
-                }
-
-                @Override
-                public void setSelected(AnActionEvent anActionEvent, boolean b) {
-                    filterOpen = b;
-                    if (filterOpen) {
-                        splitPane.setDividerLocation(400);
-                        splitPane.setDividerSize(3);
-                    } else {
-                        splitPane.setDividerLocation(0);
-                        splitPane.setDividerSize(0);
-                    }
-                }
-
-            });
-
-            editorActions.add(createGistAction());
-            editorActions.add(new BrowserHelpAction("LogViewer", "https://josesamuel.com/logviewer/"));
-            editorActions.addSeparator();
-            editorActions.add(myLogConsole.getOrCreateActions());
-            editorActions.add(new MyConfigureLogcatHeaderAction());
-
-            final ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,
-                    editorActions, false);
+            final ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("LogViewer",
+                    getEditorActions(), false);
             toolbar.setTargetComponent(console.getComponent());
 
             final JComponent tbComp1 = toolbar.getComponent();
             myPanel.add(tbComp1, BorderLayout.WEST);
         }
 
-        LogSourcePanel logSourcePanel = new LogSourcePanel(project, deviceContext);
+        logSourcePanel = new LogSourcePanel(deviceContext);
         JPanel panel = logSourcePanel.getComponent();
         panel.setBorder(IdeBorderFactory.createBorder(SideBorder.BOTTOM));
-
         myPanel.add(panel, BorderLayout.NORTH);
-
-
         editorPanel.add(consoleComponent, BorderLayout.CENTER);
+        Disposer.register(myProject, this);
         Disposer.register(this, myLogConsole);
 
         updateLogConsole();
+        DnDHandler dnDHandler = new DnDHandler(logSourceManager);
+        dnDHandler.addDndSupportForComponent(myPanel);
     }
 
-    private void notifyDeviceUpdated(final boolean forceReconnect) {
-        UIUtil.invokeAndWaitIfNeeded(new Runnable() {
-            @Override
-            public void run() {
-                if (myProject.isDisposed()) {
-                    return;
+    /**
+     * Add the fold related actions to the popup
+     */
+    private void addFoldingMenu() {
+        removeFoldingMenu();
+        ActionManager actionManager = ActionManager.getInstance();
+        DefaultActionGroup actionGroup = (DefaultActionGroup) actionManager.getAction(CONSOLE_VIEW_POPUP_MENU);
+        if (actionGroup != null) {
+            DefaultActionGroup foldGroup = new DefaultActionGroup("LogViewer Folding", true);
+            foldGroup.add(createFoldTopToCurrentAction());
+            foldGroup.add(createFoldSelectiontAction());
+            foldGroup.add(createFoldRestAction());
+            foldGroup.add(createClearFoldAction());
+            actionGroup.add(foldGroup);
+        }
+    }
+
+    /**
+     * Remove custom folding menu
+     */
+    private void removeFoldingMenu() {
+        ActionManager actionManager = ActionManager.getInstance();
+        DefaultActionGroup actionGroup = (DefaultActionGroup) actionManager.getAction(CONSOLE_VIEW_POPUP_MENU);
+
+        if (actionGroup != null) {
+            for (AnAction action : actionGroup.getChildActionsOrStubs()) {
+                if (action.getTemplatePresentation() != null
+                        && action.getTemplatePresentation().getText() != null &&
+                        action.getTemplatePresentation().getText().equals(groupName)) {
+                    actionGroup.remove(action);
                 }
-                if (forceReconnect) {
-                    if (myDevice != null) {
-                        AndroidLogcatService.getInstance().removeListener(myDevice, myLogcatReceiver);
+            }
+        }
+    }
+
+    /**
+     * Updates the refresh timer
+     */
+    private void resetUpdateTimer(Runnable task) {
+        textFilterUpdateCreateTime = System.currentTimeMillis();
+        if (timer == null) {
+            timer = new Timer(true);
+        }
+        timer.schedule(new FilterApplyTask(textFilterUpdateCreateTime, task), RESET_DELAY);
+    }
+
+    /**
+     * Resets the text filters with the current data
+     */
+    private void resetTextFilters() {
+        addFilters.clear();
+        removeFilters.clear();
+        StringTokenizer tokenizer = new StringTokenizer(textFilters.getText(), "\n");
+        String token;
+        while (tokenizer.hasMoreElements()) {
+            token = tokenizer.nextToken().trim().toLowerCase();
+            if (!token.isEmpty()) {
+                if (token.startsWith("-")) {
+                    if (token.length() > 1) {
+                        removeFilters.add(token.substring(1));
                     }
-                    myDevice = null;
+                } else {
+                    if (token.startsWith("\\-")) {
+                        token = token.substring(1);
+                    }
+                    addFilters.add(token);
                 }
-                updateLogConsole();
+            }
+        }
+        myLogConsole.refresh("Applying Text Filters");
+    }
+
+    /**
+     * Returns the updated ActionGroup for the editor
+     */
+    private ActionGroup getEditorActions() {
+        DefaultActionGroup editorActions = new DefaultActionGroup();
+        editorActions.addSeparator();
+        editorActions.add(new ToggleAction("Show/Hide Filters", "Configure Log Viewer Filters", AllIcons.General.Filter) {
+
+            @Override
+            public boolean isSelected(AnActionEvent anActionEvent) {
+                return filterOpen;
+            }
+
+            @Override
+            public void setSelected(AnActionEvent anActionEvent, boolean b) {
+                filterOpen = b;
+                if (filterOpen) {
+                    splitPane.setDividerLocation(400);
+                    splitPane.setDividerSize(3);
+                } else {
+                    splitPane.setDividerLocation(0);
+                    splitPane.setDividerSize(0);
+                }
             }
         });
+        editorActions.add(new ToggleAction("Pause/Resume logs", "Pause or Resume live logs", AllIcons.Actions.Pause) {
+
+            @Override
+            public boolean isSelected(AnActionEvent anActionEvent) {
+                return liveLogPaused;
+            }
+
+            @Override
+            public void setSelected(AnActionEvent anActionEvent, boolean b) {
+                liveLogPaused = b;
+            }
+
+            @Override
+            public void update(@NotNull AnActionEvent e) {
+                super.update(e);
+                e.getPresentation().setEnabled(logSourceManager.isDeviceSourceSelected());
+            }
+        });
+
+        editorActions.add(createGistAction());
+        editorActions.add(new BrowserHelpAction("LogViewer", "https://josesamuel.com/logviewer/"));
+        editorActions.addSeparator();
+        editorActions.add(myLogConsole.getOrCreateActions());
+        editorActions.add(new MyConfigureLogcatHeaderAction());
+        return editorActions;
     }
 
     /**
@@ -307,48 +311,202 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         return new AnAction("Share Log", "Share log using Gist", AllIcons.Actions.Share) {
             @Override
             public void actionPerformed(AnActionEvent anActionEvent) {
-                gistCreator.createGist(myLogConsole.getSelectedText(true), LogView.this);
+                gistCreator.createGist(myProject, myLogConsole.getSelectedText(true), LogView.this);
             }
         };
     }
 
+    /**
+     * Action to fold from top
+     */
+    private AnAction createFoldTopToCurrentAction() {
+        return new AnAction("Fold from top") {
+            @Override
+            public void actionPerformed(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                if (myEditor != null) {
+                    myEditor.getFoldingModel().runBatchFoldingOperation(() -> {
+                        SelectionModel selectionModel = myEditor.getSelectionModel();
+                        int start = 0;
+                        int end = selectionModel.getSelectionStart();
+                        FoldRegion foldRegion = myEditor.getFoldingModel().addFoldRegion(start, end,
+                                "...");
+                        if (foldRegion != null) {
+                            foldRegion.setExpanded(false);
+                        }
+                    }, true);
+                }
+            }
+
+            @Override
+            public void update(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                e.getPresentation().setEnabled(e.getProject() == myProject && myEditor != null && myEditor.getSelectionModel().getSelectionStart() > 0);
+            }
+        };
+    }
+
+    /**
+     * Action to fold selection
+     */
+    private AnAction createFoldSelectiontAction() {
+        return new AnAction("Fold selection") {
+            @Override
+            public void actionPerformed(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                if (myEditor != null && myEditor.getSelectionModel().hasSelection()) {
+                    myEditor.getFoldingModel().runBatchFoldingOperation(() -> {
+                        SelectionModel selectionModel = myEditor.getSelectionModel();
+                        int start = selectionModel.getSelectionStart();
+                        int end = selectionModel.getSelectionEnd();
+                        FoldRegion foldRegion = myEditor.getFoldingModel().addFoldRegion(start, end,
+                                "...");
+                        if (foldRegion != null) {
+                            foldRegion.setExpanded(false);
+                        }
+
+                    }, true);
+                }
+            }
+
+            @Override
+            public void update(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                e.getPresentation().setEnabled(e.getProject() == myProject && myEditor != null && myEditor.getSelectionModel().hasSelection());
+            }
+        };
+    }
+
+    /**
+     * Action to fold rest
+     */
+    private AnAction createFoldRestAction() {
+        return new AnAction("Fold till end") {
+            @Override
+            public void actionPerformed(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                if (myEditor != null) {
+                    myEditor.getFoldingModel().runBatchFoldingOperation(() -> {
+                        SelectionModel selectionModel = myEditor.getSelectionModel();
+                        int start = selectionModel.getSelectionStart();
+                        int end = myEditor.getDocument().getTextLength();
+                        FoldRegion foldRegion = myEditor.getFoldingModel().addFoldRegion(start, end,
+                                "...");
+
+                        if (foldRegion != null) {
+                            foldRegion.setExpanded(false);
+                        }
+
+                    }, true);
+                }
+            }
+
+            @Override
+            public void update(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                e.getPresentation().setEnabled(e.getProject() == myProject && myEditor != null && myEditor.getSelectionModel().getSelectionStart() < myEditor.getDocument().getTextLength());
+            }
+        };
+    }
+
+    /**
+     * Action to clear folds
+     */
+    private AnAction createClearFoldAction() {
+        return new AnAction("Clear all folds") {
+            @Override
+            public void actionPerformed(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                if (myEditor != null) {
+                    myEditor.getFoldingModel().runBatchFoldingOperation(() -> {
+                        for (FoldRegion foldRegion : myEditor.getFoldingModel().getAllFoldRegions()) {
+                            myEditor.getFoldingModel().removeFoldRegion(foldRegion);
+                        }
+                    }, true);
+                }
+            }
+
+            @Override
+            public void update(AnActionEvent e) {
+                ConsoleView console = myLogConsole.getConsole();
+                Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+                e.getPresentation().setEnabled(e.getProject() == myProject && myEditor != null && myEditor.getFoldingModel().getAllFoldRegions().length > 0);
+            }
+        };
+    }
+
+
     protected abstract boolean isActive();
 
+    /**
+     * Shows the given message as nint
+     */
+    public void showHint(String message) {
+        ConsoleView console = myLogConsole.getConsole();
+        Editor myEditor = console != null ? CommonDataKeys.EDITOR.getData((DataProvider) console) : null;
+        if (myEditor != null) {
+            HintManager.getInstance().showInformationHint(myEditor, message);
+        }
+    }
+
+
+    /**
+     * Activate the view
+     */
     public final void activate() {
         if (isActive()) {
+            onSourceListChanged();
             updateLogConsole();
         }
         if (myLogConsole != null) {
             myLogConsole.activate();
         }
+        addFoldingMenu();
     }
 
+    /**
+     * Deactivates the view
+     */
+    public void deactivate() {
+        logSourceManager.clearFileSources();
+        removeFoldingMenu();
+    }
+
+    /**
+     * Update the log console. Unregisters any previous source, and register with current source
+     */
     private void updateLogConsole() {
-        IDevice device = getSelectedDevice();
-        if (myDevice != device) {
-            AndroidLogcatService androidLogcatService = AndroidLogcatService.getInstance();
-            if (myDevice != null) {
-                androidLogcatService.removeListener(myDevice, myLogcatReceiver);
+        LogSource logSource = logSourceManager.getSelectedSource();
+        if (myLogSource != logSource) {
+            liveLogPaused = false;
+            processFilter.clear();
+            processListModel.clear();
+            if (myLogSource != null) {
+                myLogSource.getLogProvider().unRegisterLogListener(this);
             }
             if (myLogConsole.getConsole() != null) {
                 myLogConsole.clear();
             }
             myLogFilterModel.processingStarted();
-            myDevice = device;
-            androidLogcatService.addListener(myDevice, myLogcatReceiver, true);
+            myLogSource = logSource;
+            if (myLogSource != null) {
+                myLogSource.getLogProvider().registerLogListener(this);
+            }
+            if (logSourceManager.isDeviceSourceSelected()) {
+                processFilterTitle.setText("Process");
+            } else {
+                processFilterTitle.setText("Tags");
+            }
         }
     }
 
-    @Nullable
-    public final IDevice getSelectedDevice() {
-        if (myPreselectedDevice != null) {
-            return myPreselectedDevice;
-        } else if (myDeviceContext != null) {
-            return myDeviceContext.getSelectedDevice();
-        } else {
-            return null;
-        }
-    }
 
     @NotNull
     public final JPanel getContentPanel() {
@@ -357,34 +515,7 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
 
     @Override
     public final void dispose() {
-        if (myDevice != null) {
-            AndroidLogcatService.getInstance().removeListener(myDevice, myLogcatReceiver);
-        }
-        AndroidDebugBridge.removeClientChangeListener(this);
-    }
-
-    @Override
-    public void clientChanged(Client client, int changeMask) {
-        if ((changeMask & Client.CHANGE_NAME) != 0) {
-            updateProcessList();
-        }
-    }
-
-    private void updateProcessList() {
-        ApplicationManager.getApplication().invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                IDevice device = getSelectedDevice();
-                processListModel.removeAllElements();
-                if (device != null) {
-                    java.util.List<Client> clients = Lists.newArrayList(device.getClients());
-                    Collections.sort(clients, new ClientCellRenderer.ClientComparator());
-                    for (Client client : clients) {
-                        processListModel.addElement(client);
-                    }
-                }
-            }
-        });
+        logSourceManager.dispose();
     }
 
     /**
@@ -419,15 +550,38 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
      * Check whether the  process of the given message is acceptable
      */
     private boolean canAcceptProcess(LogCatMessage line) {
-        return processFilter.isEmpty() || canAcceptProcessName(line.getAppName()) || canAcceptPid(line.getPid());
+        if (processFilter.isEmpty()) {
+            return true;
+        }
+        boolean accept = true;
+        if (logSourceManager.isDeviceSourceSelected()) {
+            String appName = line.getAppName();
+            if (appName != null) {
+                accept = canAcceptProcessName(line.getAppName());
+                if (!accept && appName.indexOf('.') == -1) {
+                    accept = canAcceptProcessName(line.getTag());
+                }
+            }
+            if (accept && line.getPid() != 0) {
+                accept = canAcceptPid(line.getPid());
+            }
+        } else {
+            if (line.getTag() != null) {
+                accept = canAcceptProcessName(line.getTag());
+            }
+            if (accept && line.getPid() != 0) {
+                accept = canAcceptPid(line.getPid());
+            }
+        }
+        return accept;
     }
 
     /**
      * Check whether the  process name of the given message is acceptable
      */
     private boolean canAcceptProcessName(String processName) {
-        for (Client client : processFilter) {
-            if (client.getClientData().getClientDescription().equalsIgnoreCase(processName)) {
+        for (LogProcess logProcess : processFilter) {
+            if (logProcess.getProcessName().equalsIgnoreCase(processName)) {
                 return true;
             }
         }
@@ -438,8 +592,8 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
      * Check whether the  process id of the given message is acceptable
      */
     private boolean canAcceptPid(int pid) {
-        for (Client client : processFilter) {
-            if (client.getClientData().getPid() == pid) {
+        for (LogProcess client : processFilter) {
+            if (client.getProcessID() == pid) {
                 return true;
             }
         }
@@ -450,6 +604,14 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
      * Check whether the message of the given message is acceptable
      */
     private boolean canAcceptMessage(LogCatMessage line) {
+        return (addFilters.isEmpty() || isInFilter(line, addFilters))
+                && (removeFilters.isEmpty() || !isInFilter(line, removeFilters));
+    }
+
+    /**
+     * Check whether the message of the given message is acceptable
+     */
+    private boolean canAcceptMessage(String line) {
         return (addFilters.isEmpty() || isInFilter(line, addFilters))
                 && (removeFilters.isEmpty() || !isInFilter(line, removeFilters));
     }
@@ -475,12 +637,80 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
 
     @Override
     public void onGistCreated(final String gistUrl) {
-        EventQueue.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                BrowserUtil.browse(gistUrl);
+        UIUtil.invokeLaterIfNeeded(() -> BrowserUtil.browse(gistUrl));
+    }
+
+    @Override
+    public void onGistFailed(String ex) {
+        debug(ex);
+    }
+
+    @Override
+    public void onSourceSelectionChanged() {
+        UIUtil.invokeLaterIfNeeded(this::updateLogConsole);
+    }
+
+    @Override
+    public void onSourceListChanged() {
+        UIUtil.invokeLaterIfNeeded(() -> {
+            if (!myProject.isDisposed() && logSourcePanel != null && logSourceManager != null) {
+                logSourcePanel.updateDeviceCombo(logSourceManager.getLogSourceList(), logSourceManager.getSelectedSource());
+                updateLogConsole();
             }
         });
+    }
+
+    @Override
+    public void onLogLine(String log, LogProcess logProcess) {
+        if (!liveLogPaused) {
+            myLogConsole.addLogLine(log);
+            if (!processListModel.contains(logProcess)) {
+                processListModel.addElement(logProcess);
+            }
+        }
+    }
+
+    @Override
+    public void onLogData(String log) {
+        myLogConsole.addLogData(log);
+        myLogConsole.refresh("Loading logs");
+    }
+
+    @Override
+    public void onCleared() {
+        myLogConsole.clear();
+    }
+
+    @Override
+    public void debug(String log) {
+        if (log != null) {
+            UIUtil.invokeLaterIfNeeded(() -> {
+                myLogConsole.addLogLine(log);
+            });
+        }
+    }
+
+
+    @Override
+    public void onProcessList(Set<LogProcess> processList) {
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            final List<LogProcess> sortedList = new ArrayList<>(processList);
+            sortedList.sort((l, r) -> {
+                int c = l.getProcessName().compareTo(r.getProcessName());
+                if (c == 0) {
+                    c = l.getProcessID() < r.getProcessID() ? -1 : 1;
+                }
+                return c;
+            });
+            UIUtil.invokeLaterIfNeeded(() -> {
+                processListModel.removeAllElements();
+
+                for (LogProcess client : sortedList) {
+                    processListModel.addElement(client);
+                }
+            });
+        });
+
     }
 
     /**
@@ -490,18 +720,14 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         private final RegexFilterComponent myRegexFilterComponent = new RegexFilterComponent("LOG_FILTER_HISTORY", 5);
         private final AndroidLogcatPreferences myPreferences;
 
-        public AndroidLogConsole(Project project, LogFilterModel logFilterModel, LogFormatter logFormatter) {
+        AndroidLogConsole(Project project, LogFilterModel logFilterModel, LogFormatter logFormatter) {
             super(project, null, "", false, logFilterModel, GlobalSearchScope.allScope(project), logFormatter);
-            ConsoleView console = getConsole();
             myPreferences = AndroidLogcatPreferences.getInstance(project);
             myRegexFilterComponent.setFilter(myPreferences.TOOL_WINDOW_CUSTOM_FILTER);
             myRegexFilterComponent.setIsRegex(myPreferences.TOOL_WINDOW_REGEXP_FILTER);
-            myRegexFilterComponent.addRegexListener(new RegexFilterComponent.Listener() {
-                @Override
-                public void filterChanged(RegexFilterComponent filter) {
-                    myPreferences.TOOL_WINDOW_CUSTOM_FILTER = filter.getFilter();
-                    myPreferences.TOOL_WINDOW_REGEXP_FILTER = filter.isRegex();
-                }
+            myRegexFilterComponent.addRegexListener(filter -> {
+                myPreferences.TOOL_WINDOW_CUSTOM_FILTER = filter.getFilter();
+                myPreferences.TOOL_WINDOW_REGEXP_FILTER = filter.isRegex();
             });
         }
 
@@ -516,13 +742,99 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
             return myRegexFilterComponent;
         }
 
-        public void addLogLine(@NotNull String line) {
+        void addLogLine(@NotNull String line) {
             super.addMessage(line);
+            if (getOriginalDocument().length() > defaultCycleBufferSize) {
+                if (getConsole() != null) {
+                    ((ConsoleViewImpl) getConsole()).flushDeferredText();
+                }
+                getOriginalDocument().delete(0, defaultCycleBufferSize / 4);
+                refresh("Clearing old logs");
+            }
         }
 
-        public void refresh() {
-            onTextFilterChange();
+        /**
+         * Adds the bulk log data
+         */
+        void addLogData(String logData) {
+            getOriginalDocument().append(logData).append("\n");
         }
+
+        /**
+         * Refreshes the log console in background
+         */
+        void refresh(final String task) {
+            SingleTaskBackgroundExecutor.executeIfPossible(myProject, new SingleTaskBackgroundExecutor.BackgroundTask() {
+                @Override
+                public void run(ProgressIndicator progressIndicator) {
+                    try {
+                        UIUtil.invokeAndWaitIfNeeded((Runnable) () -> {
+                            progressIndicator.setFraction(0);
+                            doFilter(progressIndicator);
+                        });
+                    } catch (Throwable ex) {
+                        debug("Exception " + ex.getMessage());
+                    }
+                }
+
+                @Override
+                public String getTaskName() {
+                    return task;
+                }
+            });
+        }
+
+
+        /**
+         * Filters the console
+         */
+        private synchronized void doFilter(ProgressIndicator progressIndicator) {
+            final ConsoleView console = getConsole();
+            String allLInes = getOriginalDocument().toString();
+            final String[] lines = allLInes.split("\n");
+            if (console != null) {
+                console.clear();
+            }
+            myLogFilterModel.processingStarted();
+            int size = lines.length;
+            float current = 0;
+            for (String line : lines) {
+                printMessageToConsole(line);
+                current++;
+                progressIndicator.setFraction(current / size);
+            }
+            if (console != null) {
+                ((ConsoleViewImpl) console).requestScrollingToEnd();
+            }
+        }
+
+        /**
+         * Prints the message to console
+         */
+        private void printMessageToConsole(String line) {
+            final ConsoleView console = getConsole();
+            final LogFilterModel.MyProcessingResult processingResult = myLogFilterModel.processLine(line);
+            if (processingResult.isApplicable()) {
+                final Key key = processingResult.getKey();
+                if (key != null) {
+                    ConsoleViewContentType type = ConsoleViewContentType.getConsoleViewType(key);
+                    if (type != null) {
+                        final String messagePrefix = processingResult.getMessagePrefix();
+                        if (messagePrefix != null) {
+                            String formattedPrefix = logFormatter.formatPrefix(messagePrefix);
+                            if (console != null) {
+                                console.print(formattedPrefix, type);
+                            }
+                        }
+                        String formattedMessage = logFormatter.formatMessage(line);
+                        if (console != null) {
+                            console.print(formattedMessage + "\n", type);
+                        }
+                    }
+                }
+            }
+        }
+
 
         /**
          * Returns the selected text if there is any selection. If not return all based on parameter
@@ -549,7 +861,7 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
      * Action that performs the configuration
      */
     private final class MyConfigureLogcatHeaderAction extends AnAction {
-        public MyConfigureLogcatHeaderAction() {
+        MyConfigureLogcatHeaderAction() {
             super("Configure Header", "Configure Header", AllIcons.General.GearPlain);
         }
 
@@ -557,7 +869,7 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         public void actionPerformed(AnActionEvent e) {
             ConfigureLogcatFormatDialog dialog = new ConfigureLogcatFormatDialog(myProject);
             if (dialog.showAndGet()) {
-                myLogConsole.refresh();
+                myLogConsole.refresh("Reloading logs");
             }
         }
     }
@@ -572,7 +884,7 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         @Nullable
         private LogCatHeader myPrevHeader;
         private boolean myCustomApplicable = false;
-        private List filters = new ArrayList();
+        private List<? extends LogFilter> filters = new ArrayList();
 
         @Override
         public String getCustomFilter() {
@@ -589,12 +901,6 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
             this.myListeners.remove(listener);
         }
 
-        private void fireTextFilterChange() {
-            for (LogFilterListener listener : myListeners) {
-                listener.onTextFilterChange();
-            }
-        }
-
         @Override
         public List<? extends LogFilter> getLogFilters() {
             return filters;
@@ -609,7 +915,6 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         public void selectFilter(LogFilter filter) {
         }
 
-
         public void processingStarted() {
             this.myPrevHeader = null;
             this.myCustomApplicable = false;
@@ -623,11 +928,18 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
         @NotNull
         @Override
         public MyProcessingResult processLine(String line) {
-            LogCatMessage message = AndroidLogcatFormatter.tryParseMessage(line);
-            String continuation = message == null ? AndroidLogcatFormatter.tryParseContinuation(line) : null;
-            boolean validContinuation = continuation != null && this.myPrevHeader != null;
+            LogCatMessage message = null;
+            String continuation = null;
+            boolean validContinuation = false;
+            try {
+                message = AndroidLogcatFormatter.tryParseMessage(line);
+                continuation = message == null ? AndroidLogcatFormatter.tryParseContinuation(line) : null;
+                validContinuation = continuation != null && this.myPrevHeader != null;
+            } catch (Exception ignored) {
+            }
+
             if (message == null && !validContinuation) {
-                return new MyProcessingResult(ProcessOutputTypes.STDOUT, false, (String) null);
+                return new MyProcessingResult(ProcessOutputTypes.STDOUT, canAcceptMessage(line), null);
             } else {
                 if (message != null) {
                     this.myPrevHeader = message.getHeader();
@@ -648,6 +960,36 @@ public abstract class LogView implements Disposable, AndroidDebugBridge.IClientC
                 }
 
                 return result;
+            }
+        }
+    }
+
+    /**
+     * A task that runs only if it is the current task.
+     */
+    class FilterApplyTask extends TimerTask {
+
+        private long createTme;
+        private Runnable task;
+
+        FilterApplyTask(long createTme, Runnable task) {
+            this.createTme = createTme;
+            this.task = task;
+        }
+
+        @Override
+        public void run() {
+            try {
+                if (this.createTme == textFilterUpdateCreateTime) {
+                    UIUtil.invokeAndWaitIfNeeded((Runnable) () -> {
+                        try {
+                            task.run();
+                        } catch (Exception ignored) {
+                        }
+                    });
+                }
+            } catch (Exception t) {
+                debug(t.getMessage());
             }
         }
     }

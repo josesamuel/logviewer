@@ -1,21 +1,42 @@
 <idea-plugin>
     <id>com.josesamuel.logviewer</id>
     <name>Log Viewer</name>
-    <version>1.1</version>
-    <vendor url="https://josesamuel.com/logviewer/">LogViewer</vendor>
+    <version>2.0</version>
+    <vendor url="https://josesamuel.com/logviewer/" logo="icons/lv_16.png">LogViewer</vendor>
 
     <description><![CDATA[
-      LogViewer is an Android Studio plugin to view logcat logs that provides better filtering.
-
-      Features supported
-         1) Filter on multiple process easily
-         2) Easily specify multiple possitive and negative text filters
-    ]]></description>
+    <h1>LogViewer</h1>
+    <br/>
+    <br/>
+    <b>LogViewer</b> is an Android Studio plugin to view logcat logs.
+    <br/>
+    <br/>
+    <b>Features</b>
+    <ul>
+        <li>Easily filter on multiple process</li>
+        <li>Add +ve and -ve text filters</li>
+        <li>Pause and resume live logs</li>
+        <li>One click sharing of logs</li>
+        <li>Avoid clutter by folding logs from top, bottom or selection</li>
+        <li>Drag and drop log files</li>
+        <li>Switch between multiple log sources including devices and files</li>
+    </ul>
+    <br/>
+    <img src="https://josesamuel.com/logviewer/LogViewer_usage.gif"/>
+    <br/>
+    <br/>
+  ]]></description>
 
     <change-notes><![CDATA[
-      1.1 : Support to multiple text filters
-
-      1.0 : Initial version release.
+     <br/>
+     <b>Log Viewer 2.0</b>
+      <ul>
+        <li>Support for file log sources</li>
+        <li>Drag and drop support</li>
+        <li>Pause and resume live logs</li>
+        <li>Folding support</li>
+      </ul>
+      <br/>
     ]]>
     </change-notes>
 

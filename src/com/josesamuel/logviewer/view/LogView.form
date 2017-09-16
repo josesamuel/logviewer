@@ -25,7 +25,7 @@
             <border type="none"/>
             <children/>
           </grid>
-          <grid id="a0190" binding="filterPanel" layout-manager="BorderLayout" hgap="0" vgap="0">
+          <grid id="a0190" layout-manager="BorderLayout" hgap="0" vgap="0">
             <constraints>
               <splitpane position="left"/>
             </constraints>
@@ -126,7 +126,7 @@
                       <size top="1" left="1" bottom="1" right="1"/>
                     </border>
                     <children>
-                      <component id="f9a77" class="javax.swing.JLabel">
+                      <component id="f9a77" class="javax.swing.JLabel" binding="processFilterTitle">
                         <constraints border-constraint="North"/>
                         <properties>
                           <horizontalAlignment value="0"/>
@@ -171,7 +171,7 @@
                           <component id="75ead" class="javax.swing.JTextArea" binding="textFilters">
                             <constraints/>
                             <properties>
-                              <toolTipText value="Add filters"/>
+                              <toolTipText value="Add +ve (XYZ) or -ve (-XYZ) text filters"/>
                             </properties>
                           </component>
                         </children>

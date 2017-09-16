@@ -9,6 +9,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.intellij.execution.ExecutionManager;
+import com.intellij.execution.impl.ConsoleBuffer;
 import com.intellij.execution.ui.RunnerLayoutUi;
 import com.intellij.execution.ui.layout.PlaceInGrid;
 import com.intellij.openapi.application.ApplicationManager;
@@ -52,9 +53,10 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
      * Creates the Content to be used for the logviewer
      */
     private static Content createLogcatContent(RunnerLayoutUi layoutUi, final Project project, DeviceContext deviceContext) {
-
+        final int defaultCycleBufferSize = ConsoleBuffer.getCycleBufferSize();
+        System.setProperty("idea.cycle.buffer.size", "disabled");
         //Create the view
-        final LogView logView = new LogView(project, deviceContext) {
+        final LogView logView = new LogView(project, deviceContext, defaultCycleBufferSize) {
             @Override
             protected boolean isActive() {
                 ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID);
@@ -73,7 +75,13 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
                     boolean visible = window.isVisible();
                     if (visible != myToolWindowVisible) {
                         myToolWindowVisible = visible;
-                        logView.activate();
+                        if (visible) {
+                            System.setProperty("idea.cycle.buffer.size", "disabled");
+                            logView.activate();
+                        } else {
+                            System.setProperty("idea.cycle.buffer.size", String.valueOf(defaultCycleBufferSize));
+                            logView.deactivate();
+                        }
                     }
                 }
             }
@@ -95,12 +103,7 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
     @Override
     public void createToolWindowContent(@NotNull final Project project, @NotNull final ToolWindow toolWindow) {
 
-        //Dont add for non android project..
-        //TODO : Change this when adding support for drap and drop
         final File adb = AndroidSdkUtils.getAdb(project);
-        if (adb == null) {
-            return;
-        }
         ExecutionManager.getInstance(project).getContentManager();
 
         RunnerLayoutUi layoutUi = RunnerLayoutUi.Factory.getInstance(project).create("LogViewer", TOOL_WINDOW_ID, "Logview Tools", project);
@@ -132,31 +135,35 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
         }, project.getDisposed());
 
 
-        loadingPanel.setLoadingText("Initializing ADB");
-        loadingPanel.startLoading();
+        if (adb != null) {
+            loadingPanel.setLoadingText("Initializing ADB");
+            loadingPanel.startLoading();
 
-        ListenableFuture<AndroidDebugBridge> future = AdbService.getInstance().getDebugBridge(adb);
-        Futures.addCallback(future, new FutureCallback<AndroidDebugBridge>() {
-            @Override
-            public void onSuccess(@Nullable AndroidDebugBridge bridge) {
-                Logger.getInstance(LogviewFactory.class).info("Successfully obtained debug bridge");
-                loadingPanel.stopLoading();
-            }
-
-            @Override
-            public void onFailure(@NotNull Throwable t) {
-                loadingPanel.stopLoading();
-                Logger.getInstance(LogviewFactory.class).info("Unable to obtain debug bridge", t);
-                String msg;
-                if (t.getMessage() != null) {
-                    msg = t.getMessage();
-                } else {
-                    msg = String.format("Unable to establish a connection to adb",
-                            ApplicationNamesInfo.getInstance().getProductName(), adb.getAbsolutePath());
+            ListenableFuture<AndroidDebugBridge> future = AdbService.getInstance().getDebugBridge(adb);
+            Futures.addCallback(future, new FutureCallback<AndroidDebugBridge>() {
+                @Override
+                public void onSuccess(@Nullable AndroidDebugBridge bridge) {
+                    Logger.getInstance(LogviewFactory.class).info("Successfully obtained debug bridge");
+                    loadingPanel.stopLoading();
                 }
-                Messages.showErrorDialog(msg, "ADB Connection Error");
-            }
-        }, EdtExecutor.INSTANCE);
+
+                @Override
+                public void onFailure(@NotNull Throwable t) {
+                    loadingPanel.stopLoading();
+                    Logger.getInstance(LogviewFactory.class).info("Unable to obtain debug bridge", t);
+                    String msg;
+                    if (t.getMessage() != null) {
+                        msg = t.getMessage();
+                    } else {
+                        msg = String.format("Unable to establish a connection to adb",
+                                ApplicationNamesInfo.getInstance().getProductName(), adb.getAbsolutePath());
+                    }
+                    Messages.showErrorDialog(msg, "ADB Connection Error");
+                }
+            }, EdtExecutor.INSTANCE);
+        } else {
+            logcatView.showHint("No adb connection!.\n\nDrag and drop log files to view them.");
+        }
     }
 
 

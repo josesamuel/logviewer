@@ -1,16 +1,24 @@
 # Log Viewer
 
 
-Android Studio plugin with better log viewing capability.
+**Log Viewer** is Android Studio plugin with better log viewing capability.
 
 
-**Log Viewer** provides the following extra features over regular Android Logcat: 
+**Features :**
 
-* Easily add multiple text filters
-* Add possitive and negative text filters
+* Easily filter on **multiple process**
+* Add **possitive** and **negative** text filters
 	* Start a filter with "-" to set a negative filter
 	* This will remove the logs containing that filter from the set of logs that matches the rest of possitive filters
-* Filter logs from multiple processes easily
+* **Pause** and **resume** live logs
+* **Share** log **privately** with one click.
+* Avoid clutter by **folding** logs from top, bottom or selection
+* **Drag** and **drop** log files
+* Switch between multiple log sources including devices and files
+* Works **also** on **non android** projects
+
+![](LogViewer_usage.gif)
+
 
 
 Getting Log Viewer
@@ -21,7 +29,7 @@ Getting Log Viewer
 * Select "Browse Repositories"
 * Search for "Log Viewer" and install
 
-![](https://josesamuel.com/logviewer/LogViewerInstall.gif)
+![](LogViewerInstall.gif)
 
 
 
