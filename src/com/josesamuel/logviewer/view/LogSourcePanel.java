@@ -8,7 +8,6 @@ import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.ColoredTextContainer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.josesamuel.logviewer.log.LogSource;
-import icons.AndroidIcons;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -92,7 +91,7 @@ public class LogSourcePanel {
         }
 
         static void renderDeviceName(@NotNull IDevice d, @NotNull ColoredTextContainer component) {
-            component.setIcon(d.isEmulator() ? AndroidIcons.Ddms.Emulator2 : AndroidIcons.Ddms.RealDevice);
+            //component.setIcon(d.isEmulator() ? AndroidIcons.Ddms.Emulator2 : AndroidIcons.Ddms.RealDevice);
             String name;
             if (d.isEmulator()) {
                 String avdName = d.getAvdName();

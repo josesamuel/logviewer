@@ -305,6 +305,10 @@ public class FileDevice implements IDevice {
 
     }
 
+    public void executeShellCommand(String s, IShellOutputReceiver iShellOutputReceiver, long l, long l1, TimeUnit timeUnit) throws TimeoutException, AdbCommandRejectedException, ShellCommandUnresponsiveException, IOException {
+
+    }
+
     @Override
     public Future<String> getSystemProperty(String s) {
         return null;

@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.josesamuel.logviewer</id>
     <name>Log Viewer</name>
-    <version>2.0</version>
+    <version>3.0</version>
     <vendor url="https://josesamuel.com/logviewer/" logo="icons/lv_16.png">LogViewer</vendor>
 
     <description><![CDATA[
@@ -28,6 +28,11 @@
   ]]></description>
 
     <change-notes><![CDATA[
+     <br/>
+     <b>Log Viewer 3.0</b>
+      <ul>
+        <li>Support for Android 3.1</li>
+      </ul>
      <br/>
      <b>Log Viewer 2.0</b>
       <ul>

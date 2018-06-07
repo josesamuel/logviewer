@@ -8,6 +8,10 @@ import com.josesamuel.logviewer.log.LogProcess;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import com.android.ddmlib.Client;
+import com.android.ddmlib.ClientData;
+
+import java.util.Comparator;
 
 /**
  * Renderer used for the process list view
@@ -64,6 +68,19 @@ public class ClientCellRenderer extends ColoredListCellRenderer {
             this.append(value.toString(), SimpleTextAttributes.REGULAR_ATTRIBUTES);
         }
 
+    }
+
+    public static class ClientComparator implements Comparator<Client> {
+        public ClientComparator() {
+        }
+
+        public int compare(Client a, Client b) {
+            ClientData ad = a.getClientData();
+            ClientData bd = b.getClientData();
+            String as = ad.getClientDescription() != null ? ad.getClientDescription() : String.valueOf(ad.getPid());
+            String bs = bd.getClientDescription() != null ? bd.getClientDescription() : String.valueOf(bd.getPid());
+            return as.compareTo(bs);
+        }
     }
 
 }

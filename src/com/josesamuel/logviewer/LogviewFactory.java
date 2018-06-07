@@ -3,8 +3,6 @@ package com.josesamuel.logviewer;
 
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.tools.idea.ddms.DeviceContext;
-import com.android.tools.idea.ddms.EdtExecutor;
-import com.android.tools.idea.ddms.adb.AdbService;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -27,11 +25,14 @@ import com.intellij.openapi.wm.ex.ToolWindowManagerEx;
 import com.intellij.ui.components.JBLoadingPanel;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentManager;
+import com.josesamuel.logviewer.view.AdbBridgeFactory;
 import com.josesamuel.logviewer.view.LogView;
 import icons.LogviewerPluginIcons;
 import org.jetbrains.android.sdk.AndroidSdkUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import java.util.concurrent.Executor;
+import com.intellij.util.ui.UIUtil;
 
 import javax.swing.*;
 import java.awt.*;
@@ -139,7 +140,8 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
             loadingPanel.setLoadingText("Initializing ADB");
             loadingPanel.startLoading();
 
-            ListenableFuture<AndroidDebugBridge> future = AdbService.getInstance().getDebugBridge(adb);
+            //ListenableFuture<AndroidDebugBridge> future = AdbService.getInstance().getDebugBridge(adb);
+            ListenableFuture<AndroidDebugBridge> future = AdbBridgeFactory.getAdb(adb);
             Futures.addCallback(future, new FutureCallback<AndroidDebugBridge>() {
                 @Override
                 public void onSuccess(@Nullable AndroidDebugBridge bridge) {
@@ -166,5 +168,16 @@ public class LogviewFactory implements ToolWindowFactory, DumbAware {
         }
     }
 
+
+    public static class EdtExecutor implements Executor {
+        public static EdtExecutor INSTANCE = new EdtExecutor();
+
+        private EdtExecutor() {
+        }
+
+        public void execute(@NotNull Runnable runnable) {
+            UIUtil.invokeLaterIfNeeded(runnable);
+        }
+    }
 
 }
