@@ -4,7 +4,7 @@ Change Log
 Version 3.1 *(2018-11-24)*
 ----------------------------
 
-* Fix for Android Studio 3.2.
+* Fix for Android Studio 3.2
 
 
 Version 3.0.0 *(2018-06-07)*
