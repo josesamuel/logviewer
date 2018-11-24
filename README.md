@@ -7,7 +7,7 @@
 **Features :**
 
 * Easily filter on **multiple process**
-* Add **possitive** and **negative** text filters
+* Add **positive** and **negative** text filters
 	* Start a filter with "-" to set a negative filter
 	* This will remove the logs containing that filter from the set of logs that matches the rest of possitive filters
 * **Pause** and **resume** live logs

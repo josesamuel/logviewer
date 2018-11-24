@@ -1,8 +1,8 @@
 package com.josesamuel.logviewer.log.file.reader;
 
 import com.android.ddmlib.logcat.LogCatMessage;
-import com.android.tools.idea.logcat.AndroidLogcatFormatter;
 import com.josesamuel.logviewer.log.LogProcess;
+import com.josesamuel.logviewer.view.AndroidLogcatFormatter;
 
 class LogLineUpdater {
 

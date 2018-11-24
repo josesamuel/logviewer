@@ -210,6 +210,14 @@ public class FileDevice implements IDevice {
 
     }
 
+    public void installPackage(String s, boolean b, InstallReceiver installReceiver, String... strings) throws InstallException {
+
+    }
+
+    public void installPackage(String s, boolean b, InstallReceiver installReceiver, long l, long l1, TimeUnit timeUnit, String... strings) throws InstallException {
+
+    }
+
     @Override
     public void installPackages(List<File> list, boolean b, List<String> list1, long l, TimeUnit timeUnit) throws InstallException {
 
@@ -222,6 +230,14 @@ public class FileDevice implements IDevice {
 
     @Override
     public void installRemotePackage(String s, boolean b, String... strings) throws InstallException {
+
+    }
+
+    public void installRemotePackage(String s, boolean b, InstallReceiver installReceiver, String... strings) throws InstallException {
+
+    }
+
+    public void installRemotePackage(String s, boolean b, InstallReceiver installReceiver, long l, long l1, TimeUnit timeUnit, String... strings) throws InstallException {
 
     }
 
