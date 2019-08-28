@@ -8,7 +8,7 @@ import com.android.tools.idea.ddms.DeviceContext;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.util.ui.UIUtil;
+import com.josesamuel.logviewer.util.UIUtil;
 import com.josesamuel.logviewer.log.device.DeviceLogDataProvider;
 import com.josesamuel.logviewer.log.device.DeviceLogSource;
 import com.josesamuel.logviewer.log.dnd.DnDListener;

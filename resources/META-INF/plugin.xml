@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.josesamuel.logviewer</id>
     <name>Log Viewer</name>
-    <version>3.1</version>
+    <version>3.2</version>
     <vendor url="https://josesamuel.com/logviewer/" logo="icons/lv_16.png">LogViewer</vendor>
 
     <description><![CDATA[
@@ -29,6 +29,12 @@
 
     <change-notes><![CDATA[
      <br/>
+     <b>Log Viewer 3.2</b>
+      <ul>
+        <li>Fix for time format</li>
+      </ul>
+     <br/>
+
      <b>Log Viewer 3.1</b>
       <ul>
         <li>Support for Android 3.2.1</li>

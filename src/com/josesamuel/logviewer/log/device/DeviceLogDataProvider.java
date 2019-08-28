@@ -6,7 +6,7 @@ import com.android.ddmlib.logcat.LogCatHeader;
 import com.android.ddmlib.logcat.LogCatMessage;
 import com.android.tools.idea.logcat.AndroidLogcatService;
 import com.google.common.collect.Lists;
-import com.intellij.util.ui.UIUtil;
+import com.josesamuel.logviewer.util.UIUtil;
 import com.josesamuel.logviewer.log.LogDataListener;
 import com.josesamuel.logviewer.log.LogDataProvider;
 import com.josesamuel.logviewer.log.LogProcess;

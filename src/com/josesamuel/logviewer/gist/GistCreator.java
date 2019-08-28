@@ -4,7 +4,6 @@ package com.josesamuel.logviewer.gist;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.intellij.openapi.project.Project;
-import com.intellij.util.ui.UIUtil;
 import com.josesamuel.logviewer.util.SingleTaskBackgroundExecutor;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -13,7 +12,7 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
-
+import com.josesamuel.logviewer.util.UIUtil;
 import static org.apache.http.impl.client.HttpClients.createDefault;
 
 /**

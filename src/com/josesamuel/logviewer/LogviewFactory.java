@@ -32,7 +32,7 @@ import org.jetbrains.android.sdk.AndroidSdkUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.Executor;
-import com.intellij.util.ui.UIUtil;
+import com.josesamuel.logviewer.util.UIUtil;
 
 import javax.swing.*;
 import java.awt.*;

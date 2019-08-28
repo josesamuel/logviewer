@@ -2,7 +2,7 @@ package com.josesamuel.logviewer.log.file;
 
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
-import com.intellij.util.ui.UIUtil;
+import com.josesamuel.logviewer.util.UIUtil;
 import com.josesamuel.logviewer.log.LogDataListener;
 import com.josesamuel.logviewer.log.LogDataProvider;
 import com.josesamuel.logviewer.log.LogProcess;

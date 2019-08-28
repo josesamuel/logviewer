@@ -27,6 +27,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,9 +41,14 @@ import java.util.regex.Pattern;
  */
 public final class AndroidLogcatFormatter extends DefaultLogFormatter {
     private static final CharSequence CONTINUATION_INDENT = "    ";
-    private final AndroidLogcatPreferences myPreferences;
+    private static AndroidLogcatPreferences myPreferences;
+    private static MessageFormatter myLongEpochFormatter;
+    private static MessageFormatter myLongFormatter;
+
 
     public AndroidLogcatFormatter(@NotNull AndroidLogcatPreferences preferences) {
+        myLongEpochFormatter = new LongEpochMessageFormatter(preferences, TimeZone.getDefault().toZoneId());
+        myLongFormatter = new LongMessageFormatter();
         myPreferences = preferences;
     }
 
@@ -130,6 +136,15 @@ public final class AndroidLogcatFormatter extends DefaultLogFormatter {
 
     @NotNull
     public static String formatMessage(@NotNull String format, @NotNull LogCatHeader header, @NotNull String message) {
+
+        if (header.getTimestamp() == null) {
+            return myLongEpochFormatter.format(format, header, message);
+        }
+
+        if (header.getTimestampInstant() == null) {
+            return myLongFormatter.format(format, header, message);
+        }
+
         String ids = String.format(Locale.US, "%s-%s", header.getPid(), header.getTid());
 
         // For parsing later, tags should not have spaces in them. Replace spaces with
@@ -137,13 +152,14 @@ public final class AndroidLogcatFormatter extends DefaultLogFormatter {
         String tag = header.getTag().replace(' ', '\u00A0');
 
         return String.format(Locale.US, format,
-                header.getTimestamp(),
+                header.getTimestampInstant(),
                 ids,
                 header.getAppName(),
                 header.getLogLevel().getPriorityLetter(),
                 tag,
                 message);
     }
+
 
     /**
      * Parse a message that was encoded using {@link #formatMessageFull(LogCatHeader, String)}
@@ -230,4 +246,6 @@ public final class AndroidLogcatFormatter extends DefaultLogFormatter {
 
         return msg; // Unknown message format, return as is
     }
+
+
 }
